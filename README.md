@@ -1,2 +1,2 @@
-# me433
-Chris Uustal's repo for ME433
+# ME433 - Advanced Mechatronics
+### Chris Uustal | Northwestern University | Spring '22
