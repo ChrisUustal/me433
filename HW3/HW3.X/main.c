@@ -32,6 +32,10 @@
 #pragma config PMDL1WAY = OFF // allow multiple reconfigurations
 #pragma config IOL1WAY = OFF // allow multiple reconfigurations
 
+void WriteUART1(const char * string);
+void ReadUART1(char * message, int maxLength);
+void UARTStartup();
+
 int main() {
 
     __builtin_disable_interrupts(); // disable interrupts while initializing things
@@ -51,32 +55,81 @@ int main() {
     //TRIS = pinMode(input (1) / output (0))
     //LAT = digitalWrite(high (1) / low (0))
     //PORT = digitalRead
+    TRISBbits.TRISB4 = 1; //pinMode(B4, INPUT);
     
-    U1RXRbits.U1RXR = 0b0000; // Set A2 to U1RX
-    RPB3Rbits.RPB3R = 0b0001; // Set B3 to U1TX
-
-    // turn on UART3 without an interrupt
-    U3MODEbits.BRGH = 0; // set baud to NU32_DESIRED_BAUD
-    U3BRG = ((48000000 / 230400) / 16) - 1;
-
-    // 8 bit, no parity bit, and 1 stop bit (8N1 setup)
-    U3MODEbits.PDSEL = 0;
-    U3MODEbits.STSEL = 0;
-
-    // configure TX & RX pins as output & input pins
-    U3STAbits.UTXEN = 1;
-    U3STAbits.URXEN = 1;
-    // configure hardware flow control using RTS and CTS
-    U3MODEbits.UEN = 2;
-
-    // enable the uart
-    U3MODEbits.ON = 1;
+    UARTStartup();
     
     __builtin_enable_interrupts();
+    
+    char msg[15] = {'H','e','l','l','o',' ','W','o','r','l','d','!','\r','\n','\0'};
 
     while (1) {
         
-        
+        if(!PORTBbits.RB4){
+            WriteUART1(&msg);
+            _CP0_SET_COUNT(0);
+            while(_CP0_GET_COUNT() < 2400000){} //100ms debounce
+        }
 
     }
+}
+
+// Write a character array using UART3
+void WriteUART1(const char * string) {
+  while (*string != '\0') {
+    while (U1STAbits.UTXBF) {
+      ; // wait until tx buffer isn't full
+    }
+    U1TXREG = *string;
+    ++string;
+  }
+}
+
+// Read from UART3
+// block other functions until you get a '\r' or '\n'
+// send the pointer to your char array and the number of elements in the array
+void ReadUART1(char * message, int maxLength) {
+  char data = 0;
+  int complete = 0, num_bytes = 0;
+  // loop until you get a '\r' or '\n'
+  while (!complete) {
+    if (U1STAbits.URXDA) { // if data is available
+      data = U1RXREG;      // read the data
+      if ((data == '\n') || (data == '\r')) {
+        complete = 1;
+      } else {
+        message[num_bytes] = data;
+        ++num_bytes;
+        // roll over if the array is too small
+        if (num_bytes >= maxLength) {
+          num_bytes = 0;
+        }
+      }
+    }
+  }
+  // end the string
+  message[num_bytes] = '\0';
+}
+
+void UARTStartup(){
+    //TX = B3
+    RPB3Rbits.RPB3R = 0b0001; // Set B3 to U1TX
+    //RX = B2
+    U1RXRbits.U1RXR = 0b0100; // Set B2 to U1RX
+    
+
+    // turn on UART3 without an interrupt
+    U1MODEbits.BRGH = 0; // set baud to NU32_DESIRED_BAUD
+    U1BRG = ((48000000 / 230400) / 16) - 1;
+
+    // 8 bit, no parity bit, and 1 stop bit (8N1 setup)
+    U1MODEbits.PDSEL = 0;
+    U1MODEbits.STSEL = 0;
+
+    // configure TX & RX pins as output & input pins
+    U1STAbits.UTXEN = 1;
+    U1STAbits.URXEN = 1;
+
+    // enable the uart
+    U1MODEbits.ON = 1;
 }
